@@ -26,12 +26,12 @@
 		{
 			icon: DatabaseIcon,
 			title: 'Snapshot',
-			text: 'While F3 is open a snapshot is stored every few seconds for coordinate reading.',
+			text: 'While F3 is open a snapshot is stored every few seconds and OCR reads XYZ, biome and dimension.',
 		},
 		{
 			icon: MapIcon,
 			title: 'Coming next',
-			text: 'OCR for XYZ / biome, then the walking path on a map.',
+			text: 'The walking path on a map.',
 		},
 	];
 </script>

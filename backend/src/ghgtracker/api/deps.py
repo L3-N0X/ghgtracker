@@ -6,6 +6,7 @@ from sqlmodel import Session
 from ghgtracker.db import get_session
 from ghgtracker.models import Streamer
 from ghgtracker.tracker.manager import TrackerManager
+from ghgtracker.tracker.ocr_worker import OcrWorker
 
 DbSession = Annotated[Session, Depends(get_session)]
 
@@ -15,6 +16,13 @@ def get_tracker_manager(request: Request) -> TrackerManager:
 
 
 Trackers = Annotated[TrackerManager, Depends(get_tracker_manager)]
+
+
+def get_ocr_worker(request: Request) -> OcrWorker:
+    return request.app.state.ocr
+
+
+Ocr = Annotated[OcrWorker, Depends(get_ocr_worker)]
 
 
 def get_streamer_or_404(streamer_id: int, db: DbSession) -> Streamer:

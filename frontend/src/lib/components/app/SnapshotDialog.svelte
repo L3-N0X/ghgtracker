@@ -2,6 +2,7 @@
 	import { toast } from 'svelte-sonner';
 	import Trash2Icon from '@lucide/svelte/icons/trash-2';
 	import ImageOffIcon from '@lucide/svelte/icons/image-off';
+	import ScanTextIcon from '@lucide/svelte/icons/scan-text';
 	import * as Dialog from '$lib/components/ui/dialog';
 	import * as Select from '$lib/components/ui/select';
 	import { Button } from '$lib/components/ui/button';
@@ -29,6 +30,7 @@
 	let form = $state<Form>({ x: '', y: '', z: '', biome: '', dimension: '', facing: '' });
 	let saving = $state(false);
 	let deleting = $state(false);
+	let reading = $state(false);
 
 	const str = (v: number | string | null) => (v === null ? '' : String(v));
 
@@ -72,6 +74,21 @@
 			toast.error(err instanceof Error ? err.message : String(err));
 		} finally {
 			saving = false;
+		}
+	}
+
+	async function rerunOcr() {
+		if (!snapshot) return;
+		reading = true;
+		try {
+			const updated = await api.snapshots.ocr(snapshot.id);
+			onUpdated(updated);
+			if (updated.ocr_status === 'failed') toast.warning('No XYZ line readable in this frame');
+			else toast.success('Snapshot read again');
+		} catch (err) {
+			toast.error(err instanceof Error ? err.message : String(err));
+		} finally {
+			reading = false;
 		}
 	}
 
@@ -149,11 +166,26 @@
 				</div>
 			</form>
 
+			{#if snapshot.raw_text}
+				<details class="text-sm">
+					<summary class="cursor-pointer text-muted-foreground">OCR text</summary>
+					<pre class="mt-2 max-h-48 overflow-auto rounded-md border bg-muted/40 p-3 font-mono text-xs whitespace-pre-wrap">{snapshot.raw_text}</pre>
+				</details>
+			{/if}
+
 			<Dialog.Footer class="sm:justify-between">
-				<Button variant="ghost" class="text-muted-foreground" disabled={deleting} onclick={remove}>
-					{#if deleting}<Spinner />{:else}<Trash2Icon />{/if}
-					Delete snapshot
-				</Button>
+				<div class="flex gap-2">
+					<Button variant="ghost" class="text-muted-foreground" disabled={deleting} onclick={remove}>
+						{#if deleting}<Spinner />{:else}<Trash2Icon />{/if}
+						Delete snapshot
+					</Button>
+					{#if snapshot.image_url}
+						<Button variant="ghost" class="text-muted-foreground" disabled={reading} onclick={rerunOcr}>
+							{#if reading}<Spinner />{:else}<ScanTextIcon />{/if}
+							Read again
+						</Button>
+					{/if}
+				</div>
 				<div class="flex gap-2">
 					<Button variant="outline" onclick={() => (open = false)}>Close</Button>
 					<Button type="submit" form="snapshot-form" disabled={saving}>

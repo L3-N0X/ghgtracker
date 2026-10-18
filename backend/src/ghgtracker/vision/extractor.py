@@ -1,8 +1,8 @@
-"""Reading coordinates / biome from an F3 frame (OCR) — interface only for now.
+"""Reading coordinates / biome from an F3 frame — the interface the tracker talks to.
 
-The tracker calls an extractor for every stored snapshot. Until a real implementation exists,
-`NullExtractor` leaves the values empty and the snapshot stays in `ocr_status="pending"`, so it
-can be (re)processed later from the stored image.
+`OcrExtractor` (vision/ocr.py) is the real implementation; `NullExtractor` is used when OCR is
+switched off (``GHG_OCR_ENGINE=none``) and leaves snapshots in ``ocr_status="pending"``, so they
+can be processed later from the stored image.
 """
 
 from dataclasses import dataclass
@@ -18,10 +18,14 @@ class ExtractionResult:
     x: float | None = None
     y: float | None = None
     z: float | None = None
+    # XYZ was cross-checked against the "Block:" line of the F3 screen.
+    confirmed: bool = False
     biome: str | None = None
     dimension: str | None = None
     facing: str | None = None
     raw_text: str | None = None
+    engine: str | None = None
+    elapsed_ms: float = 0.0
 
 
 class CoordinateExtractor(Protocol):

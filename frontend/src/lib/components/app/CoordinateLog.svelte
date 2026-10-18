@@ -1,5 +1,7 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
+	import { toast } from 'svelte-sonner';
+	import ScanTextIcon from '@lucide/svelte/icons/scan-text';
 	import ImageIcon from '@lucide/svelte/icons/image';
 	import ListIcon from '@lucide/svelte/icons/list';
 	import * as Card from '$lib/components/ui/card';
@@ -30,6 +32,7 @@
 	let fresh = $state(new Set<number>());
 	let selected = $state<Snapshot | null>(null);
 	let dialogOpen = $state(false);
+	let queueing = $state(false);
 
 	const sessionId = $derived(sessionFilter === 'all' ? undefined : Number(sessionFilter));
 	const sessionLabel = $derived(
@@ -71,6 +74,13 @@
 					loadSessions();
 				}
 			}
+			if (event.type === 'snapshot.updated' && event.streamer_id === streamerId) {
+				// OCR finished: swap in the values (the open dialog follows along).
+				const updated = event.snapshot;
+				items = items.map((s) => (s.id === updated.id ? updated : s));
+				if (selected?.id === updated.id) selected = updated;
+				return;
+			}
 			if (event.type !== 'snapshot.created' || event.streamer_id !== streamerId) return;
 			const snap = event.snapshot;
 			if (sessionId !== undefined && snap.session_id !== sessionId) return;
@@ -95,6 +105,19 @@
 		selected = updated;
 	}
 
+	async function readUnread() {
+		queueing = true;
+		try {
+			const { queued } = await api.snapshots.queueOcr({ streamer_id: streamerId, session_id: sessionId });
+			if (queued) toast.success(`${queued} snapshot${queued === 1 ? '' : 's'} queued for OCR`);
+			else toast.info('No unread snapshots with a stored image');
+		} catch (err) {
+			toast.error(err instanceof Error ? err.message : String(err));
+		} finally {
+			queueing = false;
+		}
+	}
+
 	function onDeleted(id: number) {
 		items = items.filter((s) => s.id !== id);
 		total -= 1;
@@ -105,10 +128,15 @@
 	<Card.Header>
 		<Card.Title>Coordinate log</Card.Title>
 		<Card.Description>
-			Every stored F3 snapshot. Coordinates and biome stay empty until OCR is added — open a row to
-			view the frame or fill them in by hand.
+			Every stored F3 snapshot. OCR fills in the values a moment after a snapshot is stored —
+			"Unverified" readings could not be cross-checked against the Block line. Open a row to view
+			the frame or correct the values by hand.
 		</Card.Description>
-		<Card.Action>
+		<Card.Action class="flex items-center gap-2">
+			<Button variant="outline" size="sm" disabled={queueing} onclick={readUnread}>
+				{#if queueing}<Spinner />{:else}<ScanTextIcon />{/if}
+				Read unread
+			</Button>
 			<Select.Root type="single" bind:value={sessionFilter}>
 				<Select.Trigger size="sm" class="w-40">{sessionLabel}</Select.Trigger>
 				<Select.Content>

@@ -1,7 +1,15 @@
-"""Synthetic Minecraft-like frames for exercising the F3 detector without a live stream."""
+"""Synthetic Minecraft-like frames for exercising the F3 detector without a live stream.
+
+F3 text is drawn the way the game draws it: a pixel font on the GUI pixel grid (glyph bodies in
+rows 0-6, descenders in row 7 of a 9 GUI px line), light gray #E0E0E0 on per-line boxes of
+#505050 at ~56% opacity, flush against the screen edge.
+"""
+
+from functools import cache
 
 import cv2
 import numpy as np
+from PIL import Image, ImageDraw, ImageFont
 
 LEFT_LINES = [
     "Minecraft 1.21.4 (1.21.4/vanilla)",
@@ -41,6 +49,17 @@ RIGHT_LINES = [
     "snowy: false",
 ]
 
+CHAT_LINES = [
+    "viewer123: das ist ja krass",
+    "Moderator: !discord for more",
+    "pandalily: Ich hab mir CoffeeB gekauft.",
+    "florence: einfach kapsel giveaway machen",
+    "xXgamerXx: LUL",
+    "nightbot: Follow on Twitter",
+    "someone: was ist das fuer ein mod?",
+    "chatter_42: GG",
+] * 3
+
 
 def game_background(width: int, height: int, kind: str = "grass", seed: int = 0) -> np.ndarray:
     rng = np.random.default_rng(seed)
@@ -64,37 +83,63 @@ def game_background(width: int, height: int, kind: str = "grass", seed: int = 0)
     return np.ascontiguousarray(frame)
 
 
+@cache
+def _glyph_rows(text: str) -> np.ndarray:
+    """Render `text` as a 1 bit pixel font with the game's metrics: (8 rows, width) bool."""
+    font = ImageFont.load_default(size=9)  # bundled with Pillow: 6 px caps, 2 px descenders
+    image = Image.new("L", (len(text) * 8 + 8, 16))
+    draw = ImageDraw.Draw(image)
+    draw.fontmode = "1"  # no anti-aliasing
+    draw.text((0, 0), text, font=font, fill=255)
+    ink = np.asarray(image) > 0
+    top = font.getbbox("H")[1]
+    # 6 cap rows -> 7 body rows (repeat the middle one), 2 descender rows -> 1.
+    rows = [ink[top + r] for r in (0, 1, 2, 2, 3, 4, 5)]
+    rows.append(ink[top + 6] | ink[top + 7])
+    bitmap = np.array(rows)
+    cols = np.flatnonzero(bitmap.any(axis=0))
+    return bitmap[:, : cols[-1] + 1] if len(cols) else bitmap[:, :1]
+
+
 def draw_debug_lines(
-    frame: np.ndarray, lines: list[str], gui_scale: int, align: str = "left"
+    frame: np.ndarray, lines: list[str], gui_scale: int, align: str = "left", top: int = 0
 ) -> np.ndarray:
     h, w = frame.shape[:2]
-    line_h = 9 * gui_scale
-    font = cv2.FONT_HERSHEY_PLAIN
-    thickness = max(1, gui_scale - 1)
-    # Glyph cells (incl. descenders) are 8 GUI px tall inside a 9 px line.
-    (_, h1), b1 = cv2.getTextSize("Ag(|", font, 1.0, thickness)
-    font_scale = 8 * gui_scale / (h1 + b1 + thickness)
+    s = gui_scale
     for i, text in enumerate(lines):
         if not text:
-            continue
-        (tw, th), _ = cv2.getTextSize(text, font, font_scale, thickness)
-        y = 2 * gui_scale + i * line_h
-        x = 2 * gui_scale if align == "left" else w - 2 * gui_scale - tw
-        x1, x2 = x - gui_scale, x + tw + gui_scale
-        y1, y2 = y - gui_scale, y + 8 * gui_scale
-        region = frame[max(0, y1) : y2, max(0, x1) : x2].astype(np.float32)
-        frame[max(0, y1) : y2, max(0, x1) : x2] = (region * 0.44 + 80 * 0.56).astype(np.uint8)
-        cv2.putText(
-            frame,
-            text,
-            (x, y + th),
-            font,
-            font_scale,
-            (224, 224, 224),
-            thickness,
-            cv2.LINE_8,
-        )
+            continue  # blank lines have no box
+        glyphs = np.kron(_glyph_rows(text), np.ones((s, s), bool))
+        text_h, text_w = glyphs.shape
+        y = top + (2 + 9 * i) * s
+        x = 2 * s if align == "left" else w - 2 * s - text_w
+        if y + 8 * s > h:
+            break
+        # Line box: one GUI px around the text, 0x90505050.
+        y1, y2 = y - s, y + 8 * s
+        x1, x2 = max(0, x - s), min(w, x + text_w + s)
+        region = frame[y1:y2, x1:x2].astype(np.float32)
+        frame[y1:y2, x1:x2] = (region * 0.44 + 80 * 0.56).astype(np.uint8)
+        frame[y : y + text_h, x : x + text_w][glyphs] = (224, 224, 224)
     return frame
+
+
+def draw_chat(
+    frame: np.ndarray, lines: list[str], size: int = 16, x: int = 4, y: int = 4, spacing=1.2
+) -> np.ndarray:
+    """Anti-aliased chat-like text with per-line boxes, like a stream overlay."""
+    image = Image.fromarray(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)).convert("RGBA")
+    overlay = Image.new("RGBA", image.size, (0, 0, 0, 0))
+    draw = ImageDraw.Draw(overlay)
+    font = ImageFont.load_default(size=size)
+    pitch = round(size * spacing)
+    for i, text in enumerate(lines):
+        top = y + i * pitch
+        width = draw.textlength(text, font=font)
+        draw.rectangle([x - 4, top - 2, x + width + 4, top + pitch - 3], fill=(40, 40, 40, 140))
+        draw.text((x, top), text, font=font, fill=(235, 235, 235, 255))
+    image = Image.alpha_composite(image, overlay).convert("RGB")
+    return cv2.cvtColor(np.asarray(image), cv2.COLOR_RGB2BGR)
 
 
 def f3_frame(
@@ -117,3 +162,9 @@ def jpeg_roundtrip(frame: np.ndarray, quality: int = 60) -> np.ndarray:
     ok, buf = cv2.imencode(".jpg", frame, [cv2.IMWRITE_JPEG_QUALITY, quality])
     assert ok
     return cv2.imdecode(buf, cv2.IMREAD_COLOR)
+
+
+def downscale(frame: np.ndarray, height: int) -> np.ndarray:
+    """Simulate a lower stream quality, e.g. 1080p gameplay watched at 720p."""
+    h, w = frame.shape[:2]
+    return cv2.resize(frame, (round(w * height / h), height), interpolation=cv2.INTER_AREA)

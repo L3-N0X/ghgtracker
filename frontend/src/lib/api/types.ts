@@ -46,7 +46,11 @@ export interface TrackerStartRequest {
 	save_images?: boolean | null;
 }
 
-export type OcrStatus = 'pending' | 'done' | 'failed' | 'manual';
+/**
+ * pending: waiting for OCR · done: XYZ read and confirmed by the F3 "Block:" line ·
+ * unverified: XYZ read but not confirmed · failed: no XYZ readable · manual: entered by hand
+ */
+export type OcrStatus = 'pending' | 'done' | 'unverified' | 'failed' | 'manual';
 export type Dimension = 'overworld' | 'nether' | 'end';
 
 export interface Snapshot {
@@ -109,8 +113,37 @@ export interface Page<T> {
 interface ColumnAnalysis {
 	line_count: number;
 	starts_at_top: boolean;
+	/** line pitch in source pixels (9 GUI px) */
 	pitch: number | null;
-	candidate_bands: number;
+	/** distance of the text from the screen edge in source pixels */
+	anchor: number | null;
+	/** how well glyph edges sit on the GUI pixel grid, 0..1 */
+	grid: number;
+}
+
+/** OCR result of the detector lab (backend vision/extractor.py ExtractionResult) */
+export interface OcrReading {
+	x: number | null;
+	y: number | null;
+	z: number | null;
+	/** XYZ matches the "Block:" line of the F3 screen */
+	confirmed: boolean;
+	biome: string | null;
+	dimension: Dimension | null;
+	facing: string | null;
+	raw_text: string | null;
+	engine: string | null;
+	elapsed_ms: number;
+}
+
+export interface OcrInfo {
+	engine: string;
+	state: 'off' | 'loading' | 'ready' | 'error';
+	queued: number;
+	processed: number;
+	skipped: number;
+	last_ms: number | null;
+	error: string | null;
 }
 
 export interface DetectionResult {
@@ -118,10 +151,13 @@ export interface DetectionResult {
 	confidence: number;
 	left: ColumnAnalysis;
 	right: ColumnAnalysis;
+	gui_scale: number | null;
 	work_scale: number;
 	elapsed_ms: number;
 	width: number;
 	height: number;
+	/** null if no F3 screen was detected or OCR is switched off */
+	ocr: OcrReading | null;
 	overlay_jpeg: string;
 }
 
@@ -129,4 +165,5 @@ export type ServerEvent =
 	| { type: 'tracker.status'; status: TrackerStatus }
 	| { type: 'f3.opened'; streamer_id: number; event_id: number; at: string }
 	| { type: 'f3.closed'; streamer_id: number; event_id: number; frame_count: number; at: string }
-	| { type: 'snapshot.created'; streamer_id: number; snapshot: Snapshot };
+	| { type: 'snapshot.created'; streamer_id: number; snapshot: Snapshot }
+	| { type: 'snapshot.updated'; streamer_id: number; snapshot: Snapshot };

@@ -1,5 +1,6 @@
 from functools import lru_cache
 from pathlib import Path
+from typing import Literal
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
@@ -29,9 +30,26 @@ class Settings(BaseSettings):
     # Consecutive negative frames before an open F3 screen counts as closed (debounces flicker).
     f3_close_grace_frames: int = 3
 
+    # OCR of stored snapshots (XYZ, biome, dimension, facing), see vision/ocr.py.
+    # none | ppocr6-tiny (fast, small VPS) | ppocr6-small | ppocr5-mobile | ollama (vision LLM)
+    ocr_engine: Literal["none", "ppocr6-tiny", "ppocr6-small", "ppocr5-mobile", "ollama"] = (
+        "ppocr6-tiny"
+    )
+    # CPU threads for one OCR run (0 = all cores). Keep it below the VPS core count so frame
+    # capture and F3 detection keep up.
+    ocr_threads: int = 2
+    # Live snapshots waiting for OCR; more are skipped (they stay "pending" and can be re-run).
+    ocr_queue_size: int = 8
+    ocr_ollama_url: str = "http://127.0.0.1:11434"
+    ocr_ollama_model: str = "qwen3-vl:2b-instruct"
+
     @property
     def snapshot_dir(self) -> Path:
         return self.data_dir / "snapshots"
+
+    @property
+    def model_dir(self) -> Path:
+        return self.data_dir / "models"
 
     @property
     def resolved_database_url(self) -> str:

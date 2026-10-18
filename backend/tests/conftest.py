@@ -9,6 +9,8 @@ _DATA_DIR = Path(tempfile.mkdtemp(prefix="ghgtracker-test-"))
 os.environ["GHG_DATA_DIR"] = str(_DATA_DIR)
 os.environ["GHG_CAPTURE_WIDTH"] = "1280"
 os.environ["GHG_CAPTURE_HEIGHT"] = "720"
+# The API tests do not need OCR models; tests/test_ocr.py covers OCR on its own.
+os.environ["GHG_OCR_ENGINE"] = "none"
 
 
 @pytest.fixture(scope="session")

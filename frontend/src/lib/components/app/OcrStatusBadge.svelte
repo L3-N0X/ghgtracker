@@ -3,6 +3,7 @@
 	import CheckIcon from '@lucide/svelte/icons/check';
 	import XIcon from '@lucide/svelte/icons/x';
 	import PencilIcon from '@lucide/svelte/icons/pencil';
+	import CircleHelpIcon from '@lucide/svelte/icons/circle-question-mark';
 	import { Badge } from '$lib/components/ui/badge';
 	import type { OcrStatus } from '$lib/api/types';
 	import { cn } from '$lib/utils';
@@ -13,6 +14,7 @@
 		{
 			pending: { label: 'Pending OCR', icon: ClockIcon, class: 'text-muted-foreground' },
 			done: { label: 'Read', icon: CheckIcon, class: 'text-emerald-400' },
+			unverified: { label: 'Unverified', icon: CircleHelpIcon, class: 'text-amber-400' },
 			failed: { label: 'Failed', icon: XIcon, class: 'text-red-400' },
 			manual: { label: 'Manual', icon: PencilIcon, class: 'text-sky-400' },
 		}[status],

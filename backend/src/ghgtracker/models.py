@@ -2,7 +2,7 @@
 
 Hierarchy: Streamer -> TrackingSession -> (F3Event, Snapshot).
 A Snapshot is one stored frame taken while the F3 debug screen was open. Coordinate / biome
-fields stay empty until the OCR stage (not implemented yet) fills them in.
+fields are filled in by the OCR worker shortly after the snapshot is stored.
 """
 
 from datetime import UTC, datetime
@@ -32,9 +32,10 @@ class SessionStatus(StrEnum):
 
 
 class OcrStatus(StrEnum):
-    pending = "pending"  # waiting for the (future) OCR stage
-    done = "done"
-    failed = "failed"
+    pending = "pending"  # waiting for OCR (or OCR switched off)
+    done = "done"  # XYZ read and confirmed by the Block line of the F3 screen
+    unverified = "unverified"  # XYZ read, but the Block line could not confirm it
+    failed = "failed"  # no XYZ line readable (e.g. hidden behind a facecam)
     manual = "manual"  # values entered / corrected by hand
 
 
@@ -155,7 +156,7 @@ class F3EventRead(SQLModel):
 
 
 class SnapshotData(SQLModel):
-    """Values read from the F3 screen. All optional until OCR exists."""
+    """Values read from the F3 screen. All optional: parts of it may be hidden or unreadable."""
 
     x: float | None = None
     y: float | None = None

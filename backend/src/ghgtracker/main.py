@@ -7,11 +7,12 @@ from fastapi.concurrency import run_in_threadpool
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
-from ghgtracker.api import detection, snapshots, streamers, tracker, ws
+from ghgtracker.api import detection, ocr, snapshots, streamers, tracker, ws
 from ghgtracker.config import get_settings
 from ghgtracker.db import init_db
 from ghgtracker.events import event_bus
 from ghgtracker.tracker.manager import TrackerManager
+from ghgtracker.tracker.ocr_worker import OcrWorker
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
 
@@ -23,9 +24,12 @@ async def lifespan(app: FastAPI):
     init_db()
     TrackerManager.recover_interrupted_sessions()
     event_bus.bind(asyncio.get_running_loop())
-    app.state.tracker_manager = TrackerManager(settings, event_bus)
+    app.state.ocr = OcrWorker(settings, event_bus)
+    app.state.ocr.start()
+    app.state.tracker_manager = TrackerManager(settings, event_bus, app.state.ocr)
     yield
     await run_in_threadpool(app.state.tracker_manager.shutdown)
+    await run_in_threadpool(app.state.ocr.stop)
 
 
 def create_app() -> FastAPI:
@@ -44,7 +48,7 @@ def create_app() -> FastAPI:
     def health():
         return {"status": "ok"}
 
-    for module in (streamers, tracker, snapshots, detection, ws):
+    for module in (streamers, tracker, snapshots, ocr, detection, ws):
         api.include_router(module.router)
     app.include_router(api)
 

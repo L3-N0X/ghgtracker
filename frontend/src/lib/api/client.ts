@@ -1,6 +1,7 @@
 import type {
 	DetectionResult,
 	F3Event,
+	OcrInfo,
 	Page,
 	Snapshot,
 	SnapshotUpdate,
@@ -84,6 +85,14 @@ export const api = {
 		update: (id: number, body: SnapshotUpdate) =>
 			request<Snapshot>(`/snapshots/${id}`, { method: 'PATCH', body: json(body) }),
 		remove: (id: number) => request<void>(`/snapshots/${id}`, { method: 'DELETE' }),
+		/** Read one stored snapshot again right now. */
+		ocr: (id: number) => request<Snapshot>(`/snapshots/${id}/ocr`, { method: 'POST' }),
+		/** Queue unread (pending / failed) stored snapshots for OCR in the background. */
+		queueOcr: (params: { streamer_id?: number; session_id?: number }) =>
+			request<{ queued: number }>(`/snapshots/ocr${query(params)}`, { method: 'POST' }),
+	},
+	ocr: {
+		info: () => request<OcrInfo>('/ocr'),
 	},
 	f3Events: {
 		list: (params: { streamer_id?: number; session_id?: number; limit?: number; offset?: number }) =>

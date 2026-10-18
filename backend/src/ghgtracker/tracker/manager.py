@@ -4,6 +4,7 @@ Per frame:  detect F3  ->  maintain the open/closed F3 event  ->  maybe store a 
 
 Detection runs on every captured frame so even very short F3 openings are caught, while
 snapshots are rate limited by `save_interval_seconds` (OCR + storage is the expensive part).
+Snapshots are stored right away and read by the shared OCR worker in the background.
 """
 
 from __future__ import annotations
@@ -42,7 +43,7 @@ from ghgtracker.models import (
     UTCDatetime,
     utcnow,
 )
-from ghgtracker.vision.extractor import CoordinateExtractor, NullExtractor
+from ghgtracker.tracker.ocr_worker import OcrWorker
 from ghgtracker.vision.f3_detector import F3Detection, F3Detector, draw_overlay
 
 logger = logging.getLogger(__name__)
@@ -103,7 +104,7 @@ class Tracker:
         request: TrackerStartRequest,
         settings: Settings,
         bus: EventBus,
-        extractor: CoordinateExtractor | None = None,
+        ocr: OcrWorker | None = None,
     ) -> None:
         assert streamer.id is not None
         self.streamer_id = streamer.id
@@ -111,7 +112,7 @@ class Tracker:
         self.settings = settings
         self.bus = bus
         self.detector = F3Detector()
-        self.extractor = extractor or NullExtractor()
+        self.ocr = ocr
 
         self.source_url = (request.source or "").strip() or twitch_channel_url(streamer.login)
         self.capture_fps = request.capture_fps or settings.capture_fps
@@ -347,12 +348,6 @@ class Tracker:
             if cv2.imwrite(str(path), frame, quality):
                 image_rel = rel.as_posix()
 
-        extracted = None
-        try:
-            extracted = self.extractor.extract(frame, detection)
-        except Exception:  # noqa: BLE001 - OCR problems must never stop tracking
-            logger.exception("coordinate extraction failed")
-
         snapshot = Snapshot(
             session_id=self.status.session_id,
             streamer_id=self.streamer_id,
@@ -361,12 +356,8 @@ class Tracker:
             stream_offset_seconds=round(time.monotonic() - self._started_mono, 2),
             confidence=detection.confidence,
             image_path=image_rel,
-            ocr_status=OcrStatus.done if extracted else OcrStatus.pending,
+            ocr_status=OcrStatus.pending,
         )
-        if extracted:
-            for key in ("x", "y", "z", "biome", "dimension", "facing", "raw_text"):
-                setattr(snapshot, key, getattr(extracted, key))
-
         with Session(get_engine()) as db:
             db.add(snapshot)
             db.commit()
@@ -381,6 +372,9 @@ class Tracker:
             streamer_id=self.streamer_id,
             snapshot=snapshot_to_read(snapshot).model_dump(mode="json"),
         )
+        if self.ocr is not None:
+            assert snapshot.id is not None
+            self.ocr.submit_frame(snapshot.id, frame, detection)
 
     def _flush_session(self, final: bool = False) -> None:
         if self.status.session_id is None:
@@ -413,9 +407,10 @@ class TrackerAlreadyRunning(RuntimeError):
 
 
 class TrackerManager:
-    def __init__(self, settings: Settings, bus: EventBus) -> None:
+    def __init__(self, settings: Settings, bus: EventBus, ocr: OcrWorker | None = None) -> None:
         self.settings = settings
         self.bus = bus
+        self.ocr = ocr
         self._trackers: dict[int, Tracker] = {}
         self._lock = threading.Lock()
 
@@ -425,7 +420,7 @@ class TrackerManager:
             current = self._trackers.get(streamer.id)
             if current is not None and current.active:
                 raise TrackerAlreadyRunning(f"tracker for {streamer.login} is already running")
-            tracker = Tracker(streamer, request, self.settings, self.bus)
+            tracker = Tracker(streamer, request, self.settings, self.bus, self.ocr)
             self._trackers[streamer.id] = tracker
         tracker.start()
         return tracker.status
