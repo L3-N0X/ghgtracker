@@ -16,6 +16,7 @@
 	import LivePreview from './LivePreview.svelte';
 	import TrackerStats from './TrackerStats.svelte';
 	import CoordinateLog from './CoordinateLog.svelte';
+	import TravelMap from './TravelMap.svelte';
 	import F3EventsTable from './F3EventsTable.svelte';
 	import SessionsTable from './SessionsTable.svelte';
 	import ConfirmDialog from './ConfirmDialog.svelte';
@@ -31,7 +32,7 @@
 
 	let liveState = $state<'unknown' | 'checking' | 'live' | 'offline'>('unknown');
 	let confirmDelete = $state(false);
-	let tab = $state('log');
+	let tab = $state('map');
 
 	onMount(() => {
 		api.tracker
@@ -128,10 +129,14 @@
 
 		<Tabs.Root bind:value={tab}>
 			<Tabs.List>
+				<Tabs.Trigger value="map">Travel map</Tabs.Trigger>
 				<Tabs.Trigger value="log">Coordinate log</Tabs.Trigger>
 				<Tabs.Trigger value="events">F3 openings</Tabs.Trigger>
 				<Tabs.Trigger value="sessions">Sessions</Tabs.Trigger>
 			</Tabs.List>
+			<Tabs.Content value="map" class="pt-2">
+				<TravelMap {streamerId} />
+			</Tabs.Content>
 			<Tabs.Content value="log" class="pt-2">
 				<CoordinateLog {streamerId} />
 			</Tabs.Content>

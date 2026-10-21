@@ -2,7 +2,7 @@
 
 Foundation for a Twitch stream → Minecraft coordinate tracker. It watches a streamer's live
 stream, detects whenever the F3 debug screen is open (even briefly), and stores snapshots that a
-later OCR stage turns into coordinates and biomes. A map comes after that.
+later OCR stage turns into coordinates and biomes, and draws the path on a travel map.
 
 ```
 backend/    Python 3.13 · uv · FastAPI · SQLModel (SQLite) · OpenCV · streamlink + ffmpeg
@@ -76,6 +76,12 @@ streamlink ─▶ ffmpeg (fps + scale) ─▶ F3 detector (every frame, ~10 ms) 
   Values you entered by hand are never overwritten by the worker. **Read unread** in the
   coordinate log queues `pending`/`failed` snapshots, e.g. ones taken while OCR was off.
   **Read again** in the snapshot dialog re-reads a single snapshot.
+- **Travel map** (`frontend/src/lib/map/travel.ts`, `TravelMap*.svelte`): every reading with X/Z,
+  per dimension, joined in time order. The line style shows the time between two readings, not
+  the distance: solid blue up to 90 s (really travelled, even when it's an elytra flight), dashed
+  amber up to 10 min (pause), dotted magenta beyond that, across a new session, or when the player
+  was in another dimension in between. The timeline below the map shortens long gaps so they
+  don't squash everything else; drag on it to show only part of the path.
 - **Live updates**: the frontend listens on the WebSocket `/api/ws` for `tracker.status`,
   `f3.opened`, `f3.closed`, `snapshot.created` and `snapshot.updated` (OCR finished) events.
 
