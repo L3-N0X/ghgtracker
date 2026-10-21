@@ -1,3 +1,4 @@
+import logging
 from datetime import datetime
 
 from fastapi import APIRouter, HTTPException, Query, status
@@ -6,7 +7,6 @@ from sqlmodel import col, select
 
 from ghgtracker.api.deps import DbSession
 from ghgtracker.api.serializers import f3_event_to_read, snapshot_to_read
-from ghgtracker.config import get_settings
 from ghgtracker.models import (
     F3Event,
     F3EventRead,
@@ -16,6 +16,9 @@ from ghgtracker.models import (
     SnapshotRead,
     SnapshotUpdate,
 )
+from ghgtracker.storage import get_store
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(tags=["snapshots"])
 
@@ -90,7 +93,10 @@ def delete_snapshot(snapshot_id: int, db: DbSession):
     if snapshot is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "snapshot not found")
     if snapshot.image_path:
-        (get_settings().snapshot_dir / snapshot.image_path).unlink(missing_ok=True)
+        try:
+            get_store().delete(snapshot.image_path)
+        except Exception:
+            logger.exception("could not delete snapshot image %s", snapshot.image_path)
     db.delete(snapshot)
     db.commit()
 

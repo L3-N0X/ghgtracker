@@ -1,4 +1,4 @@
-import shutil
+import logging
 
 from fastapi import APIRouter, HTTPException, status
 from fastapi.concurrency import run_in_threadpool
@@ -7,7 +7,6 @@ from sqlmodel import col, select
 
 from ghgtracker.api.deps import DbSession, StreamerDep, Trackers
 from ghgtracker.capture.frame_source import check_live
-from ghgtracker.config import get_settings
 from ghgtracker.models import (
     F3Event,
     Snapshot,
@@ -18,6 +17,9 @@ from ghgtracker.models import (
     TrackingSession,
     TrackingSessionRead,
 )
+from ghgtracker.storage import get_store
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/streamers", tags=["streamers"])
 
@@ -81,7 +83,10 @@ async def delete_streamer(streamer: StreamerDep, db: DbSession, trackers: Tracke
         db.exec(delete(model).where(model.streamer_id == streamer.id))
     db.delete(streamer)
     db.commit()
-    shutil.rmtree(get_settings().snapshot_dir / streamer.login, ignore_errors=True)
+    try:
+        await run_in_threadpool(get_store().delete_prefix, streamer.login)
+    except Exception:
+        logger.exception("could not delete snapshot images of %s", streamer.login)
 
 
 @router.get("/{streamer_id}/live")

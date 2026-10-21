@@ -15,6 +15,23 @@ class Settings(BaseSettings):
     data_dir: Path = BACKEND_ROOT / "data"
     database_url: str | None = None
     cors_origins: list[str] = ["http://localhost:5173", "http://127.0.0.1:5173"]
+    # Built frontend (Vite `dist`). When this directory exists the backend serves it at `/`,
+    # which is how the Docker image runs. Unset in development (Vite serves the UI).
+    frontend_dir: Path | None = None
+    # Address uvicorn binds to when started via the `ghgtracker` command.
+    host: str = "127.0.0.1"
+    port: int = 8000
+
+    # Where snapshot images are stored: "local" = <data_dir>/snapshots, "s3" = S3 compatible
+    # bucket (RustFS, MinIO, AWS, ...). The backend streams images to the browser itself, so the
+    # bucket never has to be public.
+    storage_backend: Literal["local", "s3"] = "local"
+    s3_endpoint_url: str | None = None
+    s3_bucket: str = "ghgtracker"
+    s3_region: str = "us-east-1"
+    s3_access_key: str | None = None
+    s3_secret_key: str | None = None
+    s3_path_style: bool = True
 
     # Capture pipeline
     ffmpeg_path: str = "ffmpeg"

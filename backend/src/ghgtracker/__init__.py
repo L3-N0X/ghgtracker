@@ -4,4 +4,7 @@
 def main() -> None:
     import uvicorn
 
-    uvicorn.run("ghgtracker.main:app", host="127.0.0.1", port=8000)
+    from ghgtracker.config import get_settings
+
+    settings = get_settings()
+    uvicorn.run("ghgtracker.main:app", host=settings.host, port=settings.port)

@@ -1,0 +1,53 @@
+# GHG Tracker + RustFS (S3 storage for the snapshot images).
+#
+#   cp .env.example .env     # then change the RustFS credentials
+#   docker compose up -d
+#   -> http://localhost:8000
+#
+# Put a reverse proxy (Caddy, Traefik, nginx) with HTTPS in front of port 8000 if the tracker
+# is reachable from the internet: the UI has no login.
+
+services:
+  ghgtracker:
+    image: ghcr.io/l3-n0x/ghgtracker:${GHG_VERSION:-latest}
+    restart: unless-stopped
+    depends_on:
+      - rustfs
+    ports:
+      - "${GHG_PORT:-8000}:8000"
+    environment:
+      # Snapshot images go to RustFS (the bucket is created on first start). Remove all
+      # GHG_STORAGE_BACKEND / GHG_S3_* lines to store them in the /data volume instead.
+      GHG_STORAGE_BACKEND: s3
+      GHG_S3_ENDPOINT_URL: http://rustfs:9000
+      GHG_S3_BUCKET: ghgtracker
+      GHG_S3_ACCESS_KEY: ${RUSTFS_ACCESS_KEY:?set RUSTFS_ACCESS_KEY in .env}
+      GHG_S3_SECRET_KEY: ${RUSTFS_SECRET_KEY:?set RUSTFS_SECRET_KEY in .env}
+      # Optional tuning, see "Configuration" in the README.
+      GHG_OCR_ENGINE: ${GHG_OCR_ENGINE:-ppocr6-tiny}
+      GHG_OCR_THREADS: ${GHG_OCR_THREADS:-2}
+      GHG_CAPTURE_FPS: ${GHG_CAPTURE_FPS:-15}
+    volumes:
+      # SQLite database + downloaded OCR models.
+      - ghgtracker-data:/data
+
+  rustfs:
+    image: rustfs/rustfs:latest
+    restart: unless-stopped
+    command: /data
+    environment:
+      RUSTFS_ACCESS_KEY: ${RUSTFS_ACCESS_KEY:?set RUSTFS_ACCESS_KEY in .env}
+      RUSTFS_SECRET_KEY: ${RUSTFS_SECRET_KEY:?set RUSTFS_SECRET_KEY in .env}
+      RUSTFS_ADDRESS: ":9000"
+      RUSTFS_CONSOLE_ADDRESS: ":9001"
+      RUSTFS_CONSOLE_ENABLE: "true"
+    ports:
+      # Web console to browse the bucket. Only bound to localhost; the S3 API (9000) is only
+      # reachable from inside the compose network, the tracker serves the images itself.
+      - "127.0.0.1:9001:9001"
+    volumes:
+      - rustfs-data:/data
+
+volumes:
+  ghgtracker-data:
+  rustfs-data:

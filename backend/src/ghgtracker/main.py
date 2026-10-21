@@ -2,7 +2,7 @@ import asyncio
 import logging
 from contextlib import asynccontextmanager
 
-from fastapi import APIRouter, FastAPI
+from fastapi import APIRouter, FastAPI, HTTPException, Response
 from fastapi.concurrency import run_in_threadpool
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
@@ -11,6 +11,7 @@ from ghgtracker.api import detection, ocr, snapshots, streamers, tracker, ws
 from ghgtracker.config import get_settings
 from ghgtracker.db import init_db
 from ghgtracker.events import event_bus
+from ghgtracker.storage import get_store
 from ghgtracker.tracker.manager import TrackerManager
 from ghgtracker.tracker.ocr_worker import OcrWorker
 
@@ -20,7 +21,7 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     settings = get_settings()
-    settings.snapshot_dir.mkdir(parents=True, exist_ok=True)
+    await run_in_threadpool(get_store().prepare)
     init_db()
     TrackerManager.recover_interrupted_sessions()
     event_bus.bind(asyncio.get_running_loop())
@@ -52,8 +53,26 @@ def create_app() -> FastAPI:
         api.include_router(module.router)
     app.include_router(api)
 
-    settings.snapshot_dir.mkdir(parents=True, exist_ok=True)
-    app.mount("/media/snapshots", StaticFiles(directory=settings.snapshot_dir), name="snapshots")
+    @app.get("/media/snapshots/{key:path}", include_in_schema=False)
+    def snapshot_image(key: str):
+        """Snapshot JPEGs, read from whichever storage backend is configured."""
+        try:
+            data = get_store().get(key)
+        except ValueError:
+            data = None
+        if data is None:
+            raise HTTPException(404, "image not found")
+        # File names are random uuids and never rewritten, so browsers may cache them for good.
+        return Response(
+            data,
+            media_type="image/jpeg",
+            headers={"Cache-Control": "public, max-age=31536000, immutable"},
+        )
+
+    # Last, so it only answers what the API does not. The UI uses hash routes, so serving
+    # index.html for "/" is all it needs.
+    if settings.frontend_dir is not None and settings.frontend_dir.is_dir():
+        app.mount("/", StaticFiles(directory=settings.frontend_dir, html=True), name="frontend")
     return app
 
 

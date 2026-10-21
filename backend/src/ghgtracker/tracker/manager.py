@@ -43,6 +43,7 @@ from ghgtracker.models import (
     UTCDatetime,
     utcnow,
 )
+from ghgtracker.storage import get_store
 from ghgtracker.tracker.ocr_worker import OcrWorker
 from ghgtracker.vision.f3_detector import F3Detection, F3Detector, draw_overlay
 
@@ -342,11 +343,14 @@ class Tracker:
         image_rel: str | None = None
         if self.save_images:
             rel = Path(self.login) / str(self.status.session_id) / f"{uuid.uuid4().hex}.jpg"
-            path = self.settings.snapshot_dir / rel
-            path.parent.mkdir(parents=True, exist_ok=True)
             quality = [cv2.IMWRITE_JPEG_QUALITY, self.settings.snapshot_jpeg_quality]
-            if cv2.imwrite(str(path), frame, quality):
-                image_rel = rel.as_posix()
+            ok, encoded = cv2.imencode(".jpg", frame, quality)
+            if ok:
+                try:
+                    get_store().put(rel.as_posix(), encoded.tobytes())
+                    image_rel = rel.as_posix()
+                except Exception:
+                    logger.exception("could not store snapshot image %s", rel)
 
         snapshot = Snapshot(
             session_id=self.status.session_id,

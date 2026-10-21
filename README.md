@@ -14,6 +14,37 @@ frontend/   Svelte 5 · Vite · TypeScript · Tailwind CSS v4 · shadcn-svelte
 - `uv`, Node 22+ with `pnpm`
 - `ffmpeg` on `PATH` (decodes the stream). `streamlink` is installed as a Python dependency.
 
+## Deploy with Docker
+
+The image contains the backend, the built UI and ffmpeg, and the compose file adds
+[RustFS](https://rustfs.com) (S3) for the snapshot images:
+
+```bash
+curl -O https://raw.githubusercontent.com/L3-N0X/ghgtracker/main/docker-compose.yml
+curl -o .env https://raw.githubusercontent.com/L3-N0X/ghgtracker/main/.env.example
+# set RUSTFS_ACCESS_KEY and RUSTFS_SECRET_KEY in .env (e.g. `openssl rand -hex 16`)
+docker compose up -d       # → http://localhost:8000
+```
+
+- `ghcr.io/l3-n0x/ghgtracker` has tags `latest`, `1.2.3` / `1.2` / `1` (releases) and `edge`
+  (main branch), for `linux/amd64` and `linux/arm64`. Pin one with `GHG_VERSION` in `.env`.
+- The database and the downloaded OCR models live in the `ghgtracker-data` volume, the images in
+  `rustfs-data`. The bucket is created on first start. Browse it in the RustFS console at
+  `http://127.0.0.1:9001`.
+- The UI has no login. Put a reverse proxy with HTTPS and authentication in front of port 8000
+  before exposing it.
+- To build the image yourself:
+  `docker compose -f docker-compose.yml -f docker-compose.build.yml up -d --build`.
+- Without RustFS, delete the `GHG_STORAGE_BACKEND` / `GHG_S3_*` variables and the `rustfs`
+  service. The images then go to the `/data` volume.
+
+CI (`.github/workflows/ci.yml`) runs ruff, pytest, `pnpm check` and a test build of the image on
+every push and PR. To publish a release, push a tag:
+
+```bash
+git tag v1.0.0 && git push origin v1.0.0   # builds + pushes the image, creates the GitHub release
+```
+
 ## Run
 
 ```bash
@@ -61,7 +92,7 @@ streamlink ─▶ ffmpeg (fps + scale) ─▶ F3 detector (every frame, ~10 ms) 
   in a row without F3, the event counts as closed, so single dropped frames don't split one opening
   in two.
 - **Snapshots**: while F3 is open, at most one snapshot per `save_interval_seconds` (set per run in
-  the UI, default 5 s). The frame is stored under `backend/data/snapshots/` with
+  the UI, default 5 s). The frame is stored (see `GHG_STORAGE_BACKEND`) with
   `ocr_status = pending`. You can also enter or correct values by hand.
 - **OCR** (`vision/ocr.py`, `vision/f3_text.py`, `tracker/ocr_worker.py`): one background worker,
   shared by all trackers, reads `x/y/z`, `biome`, `dimension` and `facing` from each snapshot.
@@ -91,7 +122,11 @@ streamlink ─▶ ffmpeg (fps + scale) ─▶ F3 detector (every frame, ~10 ms) 
 (`captured_at`, `stream_offset_seconds`, `confidence`, `image_path`, `x/y/z`, `biome`,
 `dimension`, `facing`, `ocr_status`, `raw_text`).
 
-SQLite lives at `backend/data/ghgtracker.db`. Tables are created on startup, and there are no
+SQLite lives at `backend/data/ghgtracker.db`. `image_path` is a storage key
+(`<login>/<session id>/<uuid>.jpg`) and the same for both storage backends, so moving from
+`local` to `s3` only means copying `data/snapshots/*` into the bucket (e.g. with `rclone` or
+`mc mirror`). The backend serves the images itself at `/media/snapshots/<key>`; the bucket does
+not have to be reachable from the browser. Tables are created on startup, and there are no
 migrations yet.
 
 ## Configuration
@@ -100,8 +135,16 @@ Set these as environment variables (or in `backend/.env`):
 
 | Variable | Default | |
 |---|---|---|
-| `GHG_DATA_DIR` | `backend/data` | DB + snapshot images |
+| `GHG_DATA_DIR` | `backend/data` | DB, OCR models and (with `local` storage) snapshot images |
 | `GHG_DATABASE_URL` | SQLite in data dir | any SQLAlchemy URL |
+| `GHG_STORAGE_BACKEND` | `local` | `local` (`<data dir>/snapshots`) or `s3` |
+| `GHG_S3_ENDPOINT_URL` | – | e.g. `http://rustfs:9000`; empty = AWS |
+| `GHG_S3_BUCKET` | `ghgtracker` | created on startup if missing |
+| `GHG_S3_ACCESS_KEY` / `_SECRET_KEY` | – | |
+| `GHG_S3_REGION` | `us-east-1` | |
+| `GHG_S3_PATH_STYLE` | `true` | `bucket` in the path, needed for RustFS / MinIO |
+| `GHG_HOST` / `GHG_PORT` | `127.0.0.1` / `8000` | bind address of the `ghgtracker` command |
+| `GHG_FRONTEND_DIR` | – | built UI (`frontend/dist`) to serve at `/`; set in the Docker image |
 | `GHG_CAPTURE_FPS` | `15` | default analysis frame rate |
 | `GHG_CAPTURE_WIDTH` / `_HEIGHT` | `1920` / `1080` | decode resolution |
 | `GHG_STREAM_QUALITY` | `best` | streamlink quality, comma separated fallbacks |

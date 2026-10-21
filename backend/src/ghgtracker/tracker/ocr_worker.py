@@ -25,6 +25,7 @@ from ghgtracker.config import Settings
 from ghgtracker.db import get_engine
 from ghgtracker.events import EventBus
 from ghgtracker.models import Dimension, OcrStatus, Snapshot
+from ghgtracker.storage import get_store
 from ghgtracker.vision.extractor import CoordinateExtractor, ExtractionResult
 from ghgtracker.vision.f3_detector import F3Detection, F3Detector
 
@@ -176,7 +177,14 @@ class OcrWorker:
                 image_path = snapshot.image_path if snapshot else None
             if image_path is None:
                 return None
-            frame = cv2.imread(str(self.settings.snapshot_dir / image_path), cv2.IMREAD_COLOR)
+            try:
+                data = get_store().get(image_path)
+            except Exception:
+                logger.exception("could not load snapshot image %s", image_path)
+                return None
+            if data is None:
+                return None
+            frame = cv2.imdecode(np.frombuffer(data, np.uint8), cv2.IMREAD_COLOR)
             if frame is None:
                 return None
         if detection is None:
