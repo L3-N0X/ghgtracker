@@ -28,6 +28,8 @@ def list_snapshots(
     ocr_status: OcrStatus | None = None,
     since: datetime | None = None,
     until: datetime | None = None,
+    # Only snapshots with known X and Z (what the map needs).
+    has_position: bool = False,
     order: str = Query("desc", pattern="^(asc|desc)$"),
     limit: int = Query(100, ge=1, le=1000),
     offset: int = Query(0, ge=0),
@@ -43,6 +45,8 @@ def list_snapshots(
         filters.append(Snapshot.captured_at >= since)
     if until is not None:
         filters.append(Snapshot.captured_at <= until)
+    if has_position:
+        filters.extend([col(Snapshot.x).is_not(None), col(Snapshot.z).is_not(None)])
 
     total = db.exec(select(func.count()).select_from(Snapshot).where(*filters)).one()
     order_by = col(Snapshot.captured_at)

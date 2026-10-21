@@ -47,3 +47,20 @@ export function formatCoord(value: number | null | undefined, digits = 1): strin
 export function formatNumber(value: number): string {
 	return value.toLocaleString();
 }
+
+/** A span of time for humans: "45 s", "3 min 12 s", "2 h 05 min", "3 d 4 h". */
+export function formatSpan(totalSeconds: number): string {
+	const s = Math.round(totalSeconds);
+	if (s < 60) return `${s} s`;
+	const pad = (n: number) => String(n).padStart(2, '0');
+	if (s < 3600) {
+		const sec = s % 60;
+		return sec ? `${Math.floor(s / 60)} min ${pad(sec)} s` : `${s / 60} min`;
+	}
+	if (s < 86400) return `${Math.floor(s / 3600)} h ${pad(Math.floor((s % 3600) / 60))} min`;
+	return `${Math.floor(s / 86400)} d ${Math.floor((s % 86400) / 3600)} h`;
+}
+
+export function formatBlocks(blocks: number): string {
+	return blocks >= 10000 ? `${(blocks / 1000).toFixed(1)}k blocks` : `${Math.round(blocks).toLocaleString()} blocks`;
+}

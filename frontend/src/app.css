@@ -30,6 +30,10 @@
 	--chart-4: oklch(0.371 0 0);
 	--chart-5: oklch(0.269 0 0);
 	--radius: 0.625rem;
+	/* Travel map: time between consecutive points (continuous / pause / time jump) */
+	--map-gap-0: #2a78d6;
+	--map-gap-1: #c98500;
+	--map-gap-2: #d55181;
 	--sidebar: oklch(0.985 0 0);
 	--sidebar-foreground: oklch(0.141 0.005 285.823);
 	--sidebar-primary: oklch(0.21 0.006 285.885);
@@ -64,6 +68,9 @@
 	--chart-3: oklch(0.439 0 0);
 	--chart-4: oklch(0.371 0 0);
 	--chart-5: oklch(0.269 0 0);
+	--map-gap-0: #3987e5;
+	--map-gap-1: #c98500;
+	--map-gap-2: #d55181;
 	--sidebar: oklch(0.21 0.006 285.885);
 	--sidebar-foreground: oklch(0.985 0 0);
 	--sidebar-primary: oklch(0.488 0.243 264.376);

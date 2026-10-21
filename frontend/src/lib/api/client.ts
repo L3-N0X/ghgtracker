@@ -38,7 +38,7 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
 	return (res.status === 204 ? undefined : await res.json()) as T;
 }
 
-function query(params: Record<string, string | number | undefined | null>): string {
+function query(params: Record<string, string | number | boolean | undefined | null>): string {
 	const search = new URLSearchParams();
 	for (const [key, value] of Object.entries(params)) {
 		if (value !== undefined && value !== null && value !== '') search.set(key, String(value));
@@ -81,6 +81,10 @@ export const api = {
 			limit?: number;
 			offset?: number;
 			order?: 'asc' | 'desc';
+			/** ISO timestamp */
+			since?: string;
+			/** only snapshots with known X and Z */
+			has_position?: boolean;
 		}) => request<Page<Snapshot>>(`/snapshots${query(params)}`),
 		update: (id: number, body: SnapshotUpdate) =>
 			request<Snapshot>(`/snapshots/${id}`, { method: 'PATCH', body: json(body) }),

@@ -93,6 +93,10 @@ def test_tracker_on_video_file(client, tmp_path: Path) -> None:
         json={"x": -1234.5, "y": 72, "z": 845.2, "biome": "minecraft:plains"},
     )
     assert res.json()["ocr_status"] == "manual"
+    positioned = client.get(
+        "/api/snapshots", params={"streamer_id": sid, "has_position": True}
+    ).json()
+    assert [s["id"] for s in positioned["items"]] == [first["id"]]
 
     sessions = client.get(f"/api/streamers/{sid}/sessions").json()
     assert sessions[0]["snapshots_saved"] == 3
